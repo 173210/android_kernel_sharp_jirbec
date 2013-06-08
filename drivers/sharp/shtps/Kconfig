@@ -1,0 +1,29 @@
+#
+# Sharp Touchscreen configuration
+#
+
+menuconfig TOUCHSCREEN_SHTPS
+	bool "sharp touchscreens"
+	default y
+
+if TOUCHSCREEN_SHTPS
+
+	config SHTPS_SY3000_TM1601_003
+		tristate "SY3000 TM1601-003"
+		default n
+		depends on TOUCHSCREEN_SHTPS
+
+	if SHTPS_SY3000_TM1601_003
+		source "drivers/sharp/shtps/sy3000/tm1601-003/Kconfig"
+	endif # SHTPS_SY3000_TM1601_003
+
+	config SHTPS_SY3000_TM1701_001
+		tristate "SY3000 TM1701_001"
+		default n
+		depends on TOUCHSCREEN_SHTPS
+
+	if SHTPS_SY3000_TM1701_001
+		source "drivers/sharp/shtps/sy3000/tm1701-001/Kconfig"
+	endif # SHTPS_SY3000_TM1701_001
+
+endif # TOUCHSCREEN_SHTPS
