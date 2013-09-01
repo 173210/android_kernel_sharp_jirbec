@@ -565,9 +565,11 @@ void mdp4_mddi_overlay_kickoff(struct msm_fb_data_type *mfd,
 	INIT_COMPLETION(pipe->comp);
 	pending_pipe = pipe;
 
-	mutex_unlock(&mfd->dma->ov_mutex);
-	mdp_wait_vsync(mfd);
-	mutex_lock(&mfd->dma->ov_mutex);
+	if (mfd->panel_info.lcd.vsync_enable) {
+		mutex_unlock(&mfd->dma->ov_mutex);
+		mdp_wait_vsync(mfd);
+		mutex_lock(&mfd->dma->ov_mutex);
+	}
 	#endif /*CONFIG_SHLCDC_BOARD*/
 
 #ifdef CONFIG_SHLCDC_BOARD
@@ -717,7 +719,9 @@ void mdp4_mddi_dma_s_kickoff(struct msm_fb_data_type *mfd,
 	#endif /*CONFIG_SHLCDC_BOARD*/
 	
 	#ifdef CONFIG_SHLCDC_BOARD
-	mdp_wait_vsync(mfd);
+	if (mfd->panel_info.lcd.vsync_enable) {
+		mdp_wait_vsync(mfd);
+	}
 	#endif /*CONFIG_SHLCDC_BOARD*/
 	
 	/* start dma_s pipe */

@@ -1779,7 +1779,10 @@ static int nand_do_read_oob(struct mtd_info *mtd, loff_t from,
 	page = realpage & chip->pagemask;
 
 	while(1) {
-		sndcmd = chip->ecc.read_oob(mtd, chip, page, sndcmd);
+		if (ops->mode == MTD_OOB_RAW)
+			sndcmd = chip->ecc.read_oob_raw(mtd, chip, page, sndcmd);
+		else
+			sndcmd = chip->ecc.read_oob(mtd, chip, page, sndcmd);
 
 		len = min(len, readlen);
 		buf = nand_transfer_oob(chip, buf, ops, len);
@@ -2208,6 +2211,9 @@ static int nand_do_write_ops(struct mtd_info *mtd, loff_t to,
 			size_t len = min(oobwritelen, oobmaxlen);
 			oob = nand_fill_oob(chip, oob, len, ops);
 			oobwritelen -= len;
+		} else {
+			/* We still need to erase leftover OOB data */
+			memset(chip->oob_poi, 0xff, mtd->oobsize);
 		}
 
 		ret = chip->write_page(mtd, chip, wbuf, page, cached,
@@ -2383,8 +2389,11 @@ static int nand_do_write_oob(struct mtd_info *mtd, loff_t to,
 
 	memset(chip->oob_poi, 0xff, mtd->oobsize);
 	nand_fill_oob(chip, ops->oobbuf, ops->ooblen, ops);
-	status = chip->ecc.write_oob(mtd, chip, page & chip->pagemask);
-	memset(chip->oob_poi, 0xff, mtd->oobsize);
+
+	if (ops->mode == MTD_OOB_RAW)
+		status = chip->ecc.write_oob_raw(mtd, chip, page & chip->pagemask);
+	else
+		status = chip->ecc.write_oob(mtd, chip, page & chip->pagemask);
 
 	if (status)
 		return status;
@@ -3205,6 +3214,12 @@ int nand_scan_tail(struct mtd_info *mtd)
 		       chip->ecc.mode);
 		BUG();
 	}
+
+	/* For many systems, the standard OOB write also works for raw */
+	if (!chip->ecc.read_oob_raw)
+		chip->ecc.read_oob_raw = chip->ecc.read_oob;
+	if (!chip->ecc.write_oob_raw)
+		chip->ecc.write_oob_raw = chip->ecc.write_oob;
 
 	/*
 	 * The number of bytes available for a client to place data into

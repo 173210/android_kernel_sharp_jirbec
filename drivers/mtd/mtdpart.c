@@ -105,7 +105,9 @@ static int part_read_oob(struct mtd_info *mtd, loff_t from,
 
 	if (from >= mtd->size)
 		return -EINVAL;
-	if (ops->datbuf && from + ops->len > mtd->size)
+	if (ops->datbuf && from + ((ops->mode != MTD_OOB_RAW) ? ops->len :
+			ops->len / (mtd->writesize + mtd->oobsize) *
+			mtd->writesize) > mtd->size)
 		return -EINVAL;
 	res = part->master->read_oob(part->master, from + part->offset, ops);
 
@@ -186,7 +188,9 @@ static int part_write_oob(struct mtd_info *mtd, loff_t to,
 
 	if (to >= mtd->size)
 		return -EINVAL;
-	if (ops->datbuf && to + ops->len > mtd->size)
+	if (ops->datbuf && to + ((ops->mode != MTD_OOB_RAW) ? ops->len :
+			ops->len / (mtd->writesize + mtd->oobsize) *
+			mtd->writesize) > mtd->size)
 		return -EINVAL;
 	return part->master->write_oob(part->master, to + part->offset, ops);
 }

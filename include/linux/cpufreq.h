@@ -178,6 +178,7 @@ struct cpufreq_governor {
 			will fallback to performance governor */
 	struct list_head	governor_list;
 	struct module		*owner;
+	int (*boost_cpu_freq)	(struct cpufreq_policy *policy);
 };
 
 /* pass a target to the cpufreq driver 
@@ -369,6 +370,48 @@ extern struct cpufreq_governor cpufreq_gov_ondemand;
 #elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_CONSERVATIVE)
 extern struct cpufreq_governor cpufreq_gov_conservative;
 #define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_conservative)
+#elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_INTERACTIVE)
+extern struct cpufreq_governor cpufreq_gov_interactive;
+#define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_interactive)
+#elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_LAGFREE)
+extern struct cpufreq_governor cpufreq_gov_lagfree;
+#define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_lagfree)
+#elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_SMARTASS)
+extern struct cpufreq_governor cpufreq_gov_smartass;
+#define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_smartass)
+#elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_SCARY)
+extern struct cpufreq_governor cpufreq_gov_scary;
+#define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_scary)
+#elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_MINMAX)
+extern struct cpufreq_governor cpufreq_gov_minmax;
+#define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_minmax)
+#elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_SAVAGEDZEN)
+extern struct cpufreq_governor cpufreq_gov_savagedzen;
+#define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_savagedzen)
+#elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_INTERACTIVEX)
+extern struct cpufreq_governor cpufreq_gov_interactivex;
+#define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_interactivex)
+#elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_SMARTASS2)
+extern struct cpufreq_governor cpufreq_gov_smartass2;
+#define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_smartass2)
+#elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_SMOOTHASS)
+extern struct cpufreq_governor cpufreq_gov_smoothass;
+#define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_smoothass)
+#elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_BRAZILIANWAX)
+extern struct cpufreq_governor cpufreq_gov_brazilianwax;
+#define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_brazilianwax)
+#elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_HOTPLUG)
+extern struct cpufreq_governor cpufreq_gov_hotplug;
+#define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_hotplug)
+#elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_LAZY)
+extern struct cpufreq_governor cpufreq_gov_lazy;
+#define CPUFREQ_DEFAULT_GOVERNOR        (&cpufreq_gov_lazy)
+#elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_LULZACTIVE)
+extern struct cpufreq_governor cpufreq_gov_lulzactive;
+#define CPUFREQ_DEFAULT_GOVERNOR        (&cpufreq_gov_lulzactive)
+#elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_INTELLIDEMAND)
+extern struct cpufreq_governor cpufreq_gov_intellidemand;
+#define CPUFREQ_DEFAULT_GOVERNOR        (&cpufreq_gov_intellidemand)
 #endif
 
 
@@ -409,6 +452,15 @@ void cpufreq_frequency_table_get_attr(struct cpufreq_frequency_table *table,
 				      unsigned int cpu);
 
 void cpufreq_frequency_table_put_attr(unsigned int cpu);
+
+/* the following are for use in governors, or anywhere else */
+extern int cpufreq_frequency_table_next_lowest(struct cpufreq_policy *policy,
+					struct cpufreq_frequency_table *table,
+					int *index);
+
+extern int cpufreq_frequency_table_next_highest(struct cpufreq_policy *policy,
+					struct cpufreq_frequency_table *table,
+					int *index);
 
 
 /*********************************************************************

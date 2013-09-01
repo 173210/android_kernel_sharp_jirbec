@@ -185,6 +185,10 @@ static int __cpuinit msm_cpufreq_init(struct cpufreq_policy *policy)
 	policy->min = CONFIG_MSM_CPU_FREQ_MIN;
 	policy->max = CONFIG_MSM_CPU_FREQ_MAX;
 #endif
+#ifdef CONFIG_CPU_FREQ_SET_POLICY_MIN_MAX
+	policy->min = CONFIG_CPU_FREQ_POLICY_MIN;
+	policy->max = CONFIG_CPU_FREQ_POLICY_MAX;
+#endif
 
 	cur_freq = acpuclk_get_rate(policy->cpu);
 	if (cpufreq_frequency_table_target(policy, table, cur_freq,

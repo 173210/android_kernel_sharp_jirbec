@@ -167,7 +167,9 @@ static ssize_t mtd_read(struct file *file, char __user *buf, size_t count,loff_t
 
 	DEBUG(MTD_DEBUG_LEVEL0,"MTD_read\n");
 
-	if (*ppos + count > mtd->size)
+	if (*ppos + ((mfi->mode != MTD_MODE_RAW) ? count :
+				count / (mtd->writesize + mtd->oobsize) *
+				mtd->writesize) > mtd->size)
 		count = mtd->size - *ppos;
 
 	if (!count)
@@ -263,7 +265,9 @@ static ssize_t mtd_write(struct file *file, const char __user *buf, size_t count
 	if (*ppos == mtd->size)
 		return -ENOSPC;
 
-	if (*ppos + count > mtd->size)
+	if (*ppos + ((mfi->mode != MTD_MODE_RAW) ? count :
+				count / (mtd->writesize + mtd->oobsize) *
+				mtd->writesize) > mtd->size)
 		count = mtd->size - *ppos;
 
 	if (!count)
@@ -308,6 +312,7 @@ static ssize_t mtd_write(struct file *file, const char __user *buf, size_t count
 			ops.mode = MTD_OOB_RAW;
 			ops.datbuf = kbuf;
 			ops.oobbuf = NULL;
+			ops.ooboffs = 0;
 			ops.len = len;
 
 			ret = mtd->write_oob(mtd, *ppos, &ops);
@@ -378,6 +383,7 @@ static int mtd_do_writeoob(struct file *file, struct mtd_info *mtd,
 	uint64_t start, uint32_t length, void __user *ptr,
 	uint32_t __user *retp)
 {
+	struct mtd_file_info *mfi = file->private_data;
 	struct mtd_oob_ops ops;
 	uint32_t retlen;
 	int ret = 0;
@@ -385,6 +391,50 @@ static int mtd_do_writeoob(struct file *file, struct mtd_info *mtd,
 	if (!(file->f_mode & FMODE_WRITE))
 		return -EPERM;
 
+	if (mfi->mode != MTD_MODE_RAW && length > mtd->writesize && length <= mtd->writesize + mtd->oobsize) {
+		if (!mtd->write_oob)
+			ret = -EOPNOTSUPP;
+		else
+			ret = access_ok(VERIFY_WRITE, ptr,
+				length) ? 0 : -EFAULT;
+		if (ret)
+			return ret;
+
+		ops.mode = MTD_OOB_AUTO;
+		ops.len = mtd->writesize;
+		ops.ooblen = length - mtd->writesize;
+		ops.ooboffs = 0;
+
+		ops.datbuf = kmalloc(length, GFP_KERNEL);
+		if (!ops.datbuf)
+			return -ENOMEM;
+
+		ops.oobbuf = ops.datbuf + mtd->writesize;
+
+		if (copy_from_user(ops.datbuf, ptr, length)) {
+			kfree(ops.datbuf);
+			return -EFAULT;
+		}
+
+		ret = mtd->write_oob(mtd, start, &ops);
+
+		if (ops.retlen > 0xFFFFFFFFU)
+			ret = -EOVERFLOW;
+		if (ops.oobretlen > 0xFFFFFFFFU)
+			ret = -EOVERFLOW;
+
+		retlen = ops.retlen + ops.oobretlen;
+		if (copy_to_user(retp, &retlen, sizeof(length)))
+			ret = -EFAULT;
+
+		kfree(ops.datbuf);
+
+		if (ret)
+			printk(KERN_ERR "ioctl: MEMWRITEOOB: MTD_OOB_AUTO: error = %d\n", ret);
+		return ret;
+	}
+
+	//printk(KERN_NOTICE "ioctl: MEMWRITEOOB: normal\n");
 	if (length > 4096)
 		return -EINVAL;
 
@@ -397,9 +447,9 @@ static int mtd_do_writeoob(struct file *file, struct mtd_info *mtd,
 		return ret;
 
 	ops.ooblen = length;
-	ops.ooboffs = start & (mtd->oobsize - 1);
+	ops.ooboffs = start & (mtd->writesize - 1);
 	ops.datbuf = NULL;
-	ops.mode = MTD_OOB_PLACE;
+	ops.mode = (mfi->mode == MTD_MODE_RAW) ? MTD_OOB_RAW : MTD_OOB_PLACE;
 
 	if (ops.ooboffs && ops.ooblen > (mtd->oobsize - ops.ooboffs))
 		return -EINVAL;
@@ -408,7 +458,7 @@ static int mtd_do_writeoob(struct file *file, struct mtd_info *mtd,
 	if (IS_ERR(ops.oobbuf))
 		return PTR_ERR(ops.oobbuf);
 
-	start &= ~((uint64_t)mtd->oobsize - 1);
+	start &= ~((uint64_t)mtd->writesize - 1);
 	ret = mtd->write_oob(mtd, start, &ops);
 
 	if (ops.oobretlen > 0xFFFFFFFFU)
@@ -421,12 +471,56 @@ static int mtd_do_writeoob(struct file *file, struct mtd_info *mtd,
 	return ret;
 }
 
-static int mtd_do_readoob(struct mtd_info *mtd, uint64_t start,
-	uint32_t length, void __user *ptr, uint32_t __user *retp)
+static int mtd_do_readoob(struct file *file, struct mtd_info *mtd, uint64_t start,
+	uint32_t length, void __user *ptr, uint32_t __user *retp, uint32_t __user *retlenp)
 {
+	struct mtd_file_info *mfi = file->private_data;
 	struct mtd_oob_ops ops;
+	uint32_t retlen;
 	int ret = 0;
 
+	if (mfi->mode != MTD_MODE_RAW && length > mtd->writesize && length <= mtd->writesize + mtd->oobsize) {
+		if (!mtd->read_oob)
+			ret = -EOPNOTSUPP;
+		else
+			ret = access_ok(VERIFY_WRITE, ptr,
+				length) ? 0 : -EFAULT;
+		if (ret)
+			return ret;
+
+		ops.mode = MTD_OOB_AUTO;
+		ops.len = mtd->writesize;
+		ops.ooblen = length - mtd->writesize;
+		ops.ooboffs = 0;
+
+		ops.datbuf = kmalloc(length, GFP_KERNEL);
+		if (!ops.datbuf)
+			return -ENOMEM;
+
+		ops.oobbuf = ops.datbuf + mtd->writesize;
+
+		ret = mtd->read_oob(mtd, start, &ops);
+
+		if (ops.retlen > 0xFFFFFFFFU)
+			ret = -EOVERFLOW;
+		if (ops.oobretlen > 0xFFFFFFFFU)
+			ret = -EOVERFLOW;
+
+		retlen = ops.retlen + ops.oobretlen;
+
+		if (put_user(retlen, retlenp))
+			ret = -EFAULT;
+		else if (retlen && copy_to_user(ptr, ops.datbuf, retlen))
+			ret = -EFAULT;
+
+		kfree(ops.datbuf);
+
+		if (ret)
+			printk(KERN_ERR "ioctl: MEMREADOOB: MTD_OOB_AUTO: error = %d\n", ret);
+		return ret;
+	}
+
+	//printk(KERN_NOTICE "ioctl: MEMREADOOB: normal\n");
 	if (length > 4096)
 		return -EINVAL;
 
@@ -439,9 +533,9 @@ static int mtd_do_readoob(struct mtd_info *mtd, uint64_t start,
 		return ret;
 
 	ops.ooblen = length;
-	ops.ooboffs = start & (mtd->oobsize - 1);
+	ops.ooboffs = start & (mtd->writesize - 1);
 	ops.datbuf = NULL;
-	ops.mode = MTD_OOB_PLACE;
+	ops.mode = (mfi->mode == MTD_MODE_RAW) ? MTD_OOB_RAW : MTD_OOB_PLACE;
 
 	if (ops.ooboffs && ops.ooblen > (mtd->oobsize - ops.ooboffs))
 		return -EINVAL;
@@ -450,7 +544,7 @@ static int mtd_do_readoob(struct mtd_info *mtd, uint64_t start,
 	if (!ops.oobbuf)
 		return -ENOMEM;
 
-	start &= ~((uint64_t)mtd->oobsize - 1);
+	start &= ~((uint64_t)mtd->writesize - 1);
 	ret = mtd->read_oob(mtd, start, &ops);
 
 	if (put_user(ops.oobretlen, retp))
@@ -460,6 +554,117 @@ static int mtd_do_readoob(struct mtd_info *mtd, uint64_t start,
 		ret = -EFAULT;
 
 	kfree(ops.oobbuf);
+	return ret;
+}
+
+static int mtd_write_ioctl(struct mtd_info *mtd,
+		struct mtd_write_req __user *argp)
+{
+	struct mtd_write_req req;
+	struct mtd_oob_ops ops;
+	void __user *usr_data, *usr_oob;
+	int ret;
+
+	if (copy_from_user(&req, argp, sizeof(req)) ||
+			!access_ok(VERIFY_READ, req.usr_data, req.len) ||
+			!access_ok(VERIFY_READ, req.usr_oob, req.ooblen))
+		return -EFAULT;
+	if (!mtd->write_oob)
+		return -EOPNOTSUPP;
+
+	ops.mode = req.mode;
+	ops.len = (size_t)req.len;
+	ops.ooblen = (size_t)req.ooblen;
+	ops.ooboffs = 0;
+
+	usr_data = (void __user *)(uintptr_t)req.usr_data;
+	usr_oob = (void __user *)(uintptr_t)req.usr_oob;
+
+	if (req.usr_data) {
+		ops.datbuf = memdup_user(usr_data, ops.len);
+		if (IS_ERR(ops.datbuf))
+			return PTR_ERR(ops.datbuf);
+	} else {
+		ops.datbuf = NULL;
+	}
+
+	if (req.usr_oob) {
+		ops.oobbuf = memdup_user(usr_oob, ops.ooblen);
+		if (IS_ERR(ops.oobbuf)) {
+			kfree(ops.datbuf);
+			return PTR_ERR(ops.oobbuf);
+		}
+	} else {
+		ops.oobbuf = NULL;
+	}
+
+	ret = mtd->write_oob(mtd, (loff_t)req.start, &ops);
+
+	kfree(ops.datbuf);
+	kfree(ops.oobbuf);
+
+	return ret;
+}
+
+static int mtd_read_ioctl(struct mtd_info *mtd,
+		struct mtd_read_req __user *argp)
+{
+	struct mtd_read_req req;
+	struct mtd_oob_ops ops;
+	void __user *usr_data, *usr_oob;
+	uint32_t retlen, oobretlen;
+	int ret;
+
+	if (copy_from_user(&req, argp, sizeof(req)) ||
+			!access_ok(VERIFY_WRITE, req.usr_data, req.len) ||
+			!access_ok(VERIFY_WRITE, req.usr_oob, req.ooblen))
+		return -EFAULT;
+	if (!mtd->read_oob)
+		return -EOPNOTSUPP;
+
+	ops.mode = req.mode;
+	ops.len = (size_t)req.len;
+	ops.ooblen = (size_t)req.ooblen;
+	ops.ooboffs = 0;
+
+	if (req.usr_data) {
+		ops.datbuf = kmalloc(ops.len, GFP_KERNEL);
+		if (!ops.datbuf)
+			return -ENOMEM;
+	} else {
+		ops.datbuf = NULL;
+	}
+
+	if (req.usr_oob) {
+		ops.oobbuf = kmalloc(ops.ooblen, GFP_KERNEL);
+		if (!ops.oobbuf) {
+			kfree(ops.datbuf);
+			return -ENOMEM;
+		}
+	} else {
+		ops.oobbuf = NULL;
+	}
+
+	ret = mtd->read_oob(mtd, (loff_t)req.start, &ops);
+
+	usr_data = (void __user *)(uintptr_t)req.usr_data;
+	usr_oob = (void __user *)(uintptr_t)req.usr_oob;
+
+	retlen = (__u32)ops.retlen;
+	oobretlen = (__u32)ops.oobretlen;
+	if (put_user(retlen, &argp->retlen) ||
+			put_user(oobretlen, &argp->oobretlen))
+		ret = -EFAULT;
+	else if (ops.retlen && ops.datbuf &&
+			copy_to_user(usr_data, ops.datbuf, ops.retlen))
+		ret = -EFAULT;
+	else if (ops.oobretlen && ops.oobbuf &&
+			copy_to_user(usr_oob, ops.oobbuf, ops.oobretlen))
+		ret = -EFAULT;
+
+	kfree(ops.datbuf);
+	kfree(ops.oobbuf);
+
 	return ret;
 }
 
@@ -510,15 +715,15 @@ static int mtd_ioctl(struct file *file, u_int cmd, u_long arg)
 	}
 
 	case MEMGETINFO:
+		memset(&info, 0, sizeof(info));
 		info.type	= mtd->type;
 		info.flags	= mtd->flags;
 		info.size	= mtd->size;
 		info.erasesize	= mtd->erasesize;
 		info.writesize	= mtd->writesize;
 		info.oobsize	= mtd->oobsize;
-		/* The below fields are obsolete */
-		info.ecctype	= -1;
-		info.eccsize	= 0;
+		/* The below field is obsolete */
+		info.padding	= 0;
 		if (copy_to_user(argp, &info, sizeof(struct mtd_info_user)))
 			return -EFAULT;
 		break;
@@ -614,8 +819,8 @@ static int mtd_ioctl(struct file *file, u_int cmd, u_long arg)
 		if (copy_from_user(&buf, argp, sizeof(buf)))
 			ret = -EFAULT;
 		else
-			ret = mtd_do_readoob(mtd, buf.start, buf.length,
-				buf.ptr, &buf_user->start);
+			ret = mtd_do_readoob(file, mtd, buf.start, buf.length,
+				buf.ptr, &buf_user->start, &buf_user->length);
 		break;
 	}
 
@@ -641,9 +846,23 @@ static int mtd_ioctl(struct file *file, u_int cmd, u_long arg)
 		if (copy_from_user(&buf, argp, sizeof(buf)))
 			ret = -EFAULT;
 		else
-			ret = mtd_do_readoob(mtd, buf.start, buf.length,
+			ret = mtd_do_readoob(file, mtd, buf.start, buf.length,
 				(void __user *)(uintptr_t)buf.usr_ptr,
-				&buf_user->length);
+				&buf_user->length, &buf_user->length);
+		break;
+	}
+
+	case MEMWRITE:
+	{
+		ret = mtd_write_ioctl(mtd,
+		      (struct mtd_write_req __user *)arg);
+		break;
+	}
+
+	case MEMREAD:
+	{
+		ret = mtd_read_ioctl(mtd,
+		      (struct mtd_read_req __user *)arg);
 		break;
 	}
 
@@ -890,9 +1109,9 @@ static long mtd_compat_ioctl(struct file *file, unsigned int cmd,
 		if (copy_from_user(&buf, argp, sizeof(buf)))
 			ret = -EFAULT;
 		else
-			ret = mtd_do_readoob(mtd, buf.start,
+			ret = mtd_do_readoob(file, mtd, buf.start,
 				buf.length, compat_ptr(buf.ptr),
-				&buf_user->start);
+				&buf_user->start, &buf_user->length);
 		break;
 	}
 	default:

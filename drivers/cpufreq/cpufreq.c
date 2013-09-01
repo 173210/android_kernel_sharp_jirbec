@@ -651,6 +651,88 @@ static ssize_t show_scaling_setspeed(struct cpufreq_policy *policy, char *buf)
 	return policy->governor->show_setspeed(policy, buf);
 }
 
+#ifdef CONFIG_CPU_FREQ_VDD_LEVELS
+extern ssize_t acpuclk_get_vdd_levels_str(char *buf);
+static ssize_t show_vdd_levels(struct cpufreq_policy *policy, char *buf)
+{
+	return acpuclk_get_vdd_levels_str(buf);
+}
+
+extern void acpuclk_set_vdd(unsigned acpu_khz, int vdd);
+static ssize_t store_vdd_levels(struct cpufreq_policy *policy, const char *buf, size_t count)
+{
+	int i = 0, j;
+	int pair[2] = { 0, 0 };
+	int sign = 0;
+
+	if (count < 1)
+		return 0;
+
+	if (buf[0] == '-') {
+		sign = -1;
+		i++;
+	} else if (buf[0] == '+') {
+		sign = 1;
+		i++;
+	}
+
+	for (j = 0; i < count; i++) {
+		char c = buf[i];
+		if ((c >= '0') && (c <= '9')) {
+			pair[j] *= 10;
+			pair[j] += (c - '0');
+		} else if ((c == ' ') || (c == '\t')) {
+			if (pair[j] != 0) {
+				j++;
+				if ((sign != 0) || (j > 1))
+					break;
+			}
+		} else
+			break;
+	}
+
+	if (sign != 0) {
+		if (pair[0] > 0)
+			acpuclk_set_vdd(0, sign * pair[0]);
+	} else {
+		if ((pair[0] > 0) && (pair[1] > 0))
+			acpuclk_set_vdd((unsigned)pair[0], pair[1]);
+		else
+			return -EINVAL;
+	}
+	return count;
+}
+#endif
+
+static ssize_t show_boost_cpufreq(struct cpufreq_policy *policy, char *buf)
+{
+	if (!policy->governor || !policy->governor->boost_cpu_freq)
+		return sprintf(buf, "<unsupported>\n");
+
+	return sprintf(buf, "%d\n", 0);
+}
+
+static ssize_t store_boost_cpufreq(struct cpufreq_policy *policy,
+					const char *buf, size_t count)
+{
+	unsigned int boost = 0;
+	unsigned int ret;
+
+	if (!policy->governor)
+		return -EINVAL;
+
+	ret = sscanf(buf, "%u", &boost);
+	if (ret != 1)
+		return -EINVAL;
+
+	/* call registered policy-gov-boost functionality */
+	if (policy->governor->boost_cpu_freq)
+		policy->governor->boost_cpu_freq(policy);
+
+	return count;
+
+}
+
 /**
  * show_scaling_driver - show the current cpufreq HW/BIOS limitation
  */
@@ -680,6 +762,10 @@ cpufreq_freq_attr_rw(scaling_min_freq);
 cpufreq_freq_attr_rw(scaling_max_freq);
 cpufreq_freq_attr_rw(scaling_governor);
 cpufreq_freq_attr_rw(scaling_setspeed);
+cpufreq_freq_attr_rw(boost_cpufreq);
+#ifdef CONFIG_CPU_FREQ_VDD_LEVELS
+cpufreq_freq_attr_rw(vdd_levels);
+#endif
 
 static struct attribute *default_attrs[] = {
 	&cpuinfo_min_freq.attr,
@@ -693,6 +779,10 @@ static struct attribute *default_attrs[] = {
 	&scaling_driver.attr,
 	&scaling_available_governors.attr,
 	&scaling_setspeed.attr,
+	&boost_cpufreq.attr,
+#ifdef CONFIG_CPU_FREQ_VDD_LEVELS
+	&vdd_levels.attr,
+#endif
 	NULL
 };
 
@@ -1051,8 +1141,13 @@ static int cpufreq_add_dev(struct sys_device *sys_dev)
 		dprintk("initialization failed\n");
 		goto err_unlock_policy;
 	}
+#ifndef CONFIG_CPU_FREQ_SET_USER_POLICY_MIN_MAX
 	policy->user_policy.min = policy->min;
 	policy->user_policy.max = policy->max;
+#else
+	policy->user_policy.min = CONFIG_CPU_FREQ_USER_POLICY_MIN;
+	policy->user_policy.max = CONFIG_CPU_FREQ_USER_POLICY_MAX;
+#endif
 
 	blocking_notifier_call_chain(&cpufreq_policy_notifier_list,
 				     CPUFREQ_START, policy);

@@ -587,7 +587,7 @@ void __init perflock_init(struct perflock_platform_data *pdata)
 	for(i = 0; i < table_size; i++){
 		perf_acpu_table[i] = scsys_get_perflock_freq(i) * 1000;
 	}
-	policy_min = scsys_get_perflock_freq(PERF_LOCK_245MHz);
+//	policy_min = scsys_get_perflock_freq(PERF_LOCK_245MHz);
 #else
 	if (!pdata)
 		goto invalid_config;

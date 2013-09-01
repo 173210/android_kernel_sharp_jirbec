@@ -19,6 +19,7 @@
 #include <linux/netdevice.h>
 #include <linux/bitops.h>
 #include <linux/uaccess.h>
+#include <linux/vmalloc.h>
 #include <linux/slab.h>
 
 /*
@@ -719,7 +720,7 @@ static int ethtool_get_regs(struct net_device *dev, char __user *useraddr)
 	if (regs.len > reglen)
 		regs.len = reglen;
 
-	regbuf = kzalloc(reglen, GFP_USER);
+	regbuf = vzalloc(reglen);
 	if (!regbuf)
 		return -ENOMEM;
 
@@ -734,7 +735,7 @@ static int ethtool_get_regs(struct net_device *dev, char __user *useraddr)
 	ret = 0;
 
  out:
-	kfree(regbuf);
+	vfree(regbuf);
 	return ret;
 }
 

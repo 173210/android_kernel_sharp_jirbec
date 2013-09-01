@@ -49,7 +49,7 @@ struct msm_ptbl_entry {
 #define MSM_MAX_PARTITIONS 16
 
 static struct mtd_partition msm_nand_partitions[MSM_MAX_PARTITIONS];
-static char msm_nand_names[MSM_MAX_PARTITIONS * 16];
+static char msm_nand_names[MSM_MAX_PARTITIONS * 16] = "";
 
 extern struct flash_platform_data msm_nand_data;
 
@@ -81,6 +81,19 @@ static int __init parse_tag_msm_partition(const struct tag *tag)
 		name += 16;
 		entry++;
 		ptn++;
+	}
+
+	if (count < MSM_MAX_PARTITIONS) {
+		name = "_modem";
+		ptn->name = name;
+		ptn->offset = 0x0;
+		ptn->size = 0x2fa;
+		printk(KERN_INFO "Partition %s "
+				"-- Offset:%llx Size:%llx\n",
+				ptn->name, ptn->offset, ptn->size);
+		name += 16;
+		ptn++;
+		count++;
 	}
 
 	msm_nand_data.nr_parts = count;

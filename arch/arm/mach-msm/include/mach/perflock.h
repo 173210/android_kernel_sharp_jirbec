@@ -27,6 +27,7 @@
 
 #ifdef CONFIG_SHSYS_CUST_PERFLOCK
 enum {
+#if 0
 	PERF_LOCK_122MHz,
 	PERF_LOCK_245MHz,
 	PERF_LOCK_368MHz,	/* Medium performance */
@@ -34,6 +35,32 @@ enum {
 	PERF_LOCK_1024MHz,	/* High performance 1024MHz */
 	PERF_LOCK_1200MHz,	/* High performance 1200MHz */
 	PERF_LOCK_1401MHz,	/* High performance 1401MHz */
+#else
+	PERF_LOCK_24MHz,
+	PERF_LOCK_61MHz,
+	PERF_LOCK_122MHz,
+	PERF_LOCK_184MHz,
+	PERF_LOCK_192MHz,
+	PERF_LOCK_245MHz,
+	PERF_LOCK_368MHz,	/* Medium performance */
+	PERF_LOCK_460MHz,	/* Medium performance */
+	PERF_LOCK_576MHz,	/* Medium performance */
+	PERF_LOCK_652MHz,	/* Medium performance */
+	PERF_LOCK_768MHz,	/* High performance */
+	PERF_LOCK_806MHz,	/* High performance */
+	PERF_LOCK_921MHz,	/* High performance */
+	PERF_LOCK_1024MHz,	/* High performance 1024MHz */
+	PERF_LOCK_1113MHz,	/* High performance */
+	PERF_LOCK_1209MHz,	/* High performance */
+	PERF_LOCK_1305MHz,	/* High performance */
+	PERF_LOCK_1401MHz,	/* High performance 1401MHz */
+	PERF_LOCK_1516MHz,	/* High performance */
+	PERF_LOCK_1612MHz,	/* High performance */
+	PERF_LOCK_1708MHz,	/* High performance */
+	PERF_LOCK_1804MHz,	/* High performance */
+	PERF_LOCK_1900MHz,	/* High performance */
+	PERF_LOCK_2016MHz,	/* High performance */
+#endif
 	PERF_LOCK_HIGHEST = CONFIG_SHSYS_CUST_PERFLOCK_STEP_CHANGE, /* Highest performance */
 	PERF_LOCK_INVALID,
 };

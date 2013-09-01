@@ -1501,7 +1501,7 @@ config SHSYS_CUST_PERFLOCK_STEP_CHANGE
 	int "Performance Lock CPU FREQ Table Count"
 	depends on SHSYS_CUST_PERFLOCK
 	depends on ARCH_QSD8X50 || ARCH_MSM7X30 || ARCH_MSM7X00A || ARCH_MSM7227 || ARCH_MSM7225
-	default 6
+	default 13
 
 config MSM_SHOW_RESUME_IRQ
 	bool "Enable logging of interrupts that could have caused resume"

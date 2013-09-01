@@ -30,6 +30,43 @@ struct mtd_oob_buf64 {
 	__u64 usr_ptr;
 };
 
+struct mtd_write_req {
+	__u64 start;
+	__u32 len;
+	__u32 ooblen;
+	__u64 usr_data;
+	__u64 usr_oob;
+	__u8 mode;
+	__u8 padding[7];
+};
+
+struct mtd_read_req {
+	__u64 start;
+	__u32 len;
+	__u32 retlen;
+	__u32 ooblen;
+	__u32 oobretlen;
+	__u64 usr_data;
+	__u64 usr_oob;
+	__u8 mode;
+	__u8 padding[7];
+};
+
+/*
+ * oob operation modes
+ *
+ * MTD_OOB_PLACE:       oob data are placed at the given offset (default)
+ * MTD_OOB_AUTO:        oob data are automatically placed at the free areas
+ *                      which are defined by the internal ecclayout
+ * MTD_OOB_RAW:         mode to read or write oob and data without doing ECC
+ *			checking
+ */
+enum {
+	MTD_OOB_PLACE = 0,
+	MTD_OOB_AUTO = 1,
+	MTD_OOB_RAW = 2,
+};
+
 #define MTD_ABSENT		0
 #define MTD_RAM			1
 #define MTD_ROM			2
@@ -68,10 +105,7 @@ struct mtd_info_user {
 	__u32 erasesize;
 	__u32 writesize;
 	__u32 oobsize;   // Amount of OOB data per block (e.g. 16)
-	/* The below two fields are obsolete and broken, do not use them
-	 * (TODO: remove at some point) */
-	__u32 ecctype;
-	__u32 eccsize;
+	__u64 padding;	/* Old obsolete field; do not use */
 };
 
 struct region_info_user {
@@ -110,6 +144,8 @@ struct otp_info {
 #define MEMERASE64		_IOW('M', 20, struct erase_info_user64)
 #define MEMWRITEOOB64		_IOWR('M', 21, struct mtd_oob_buf64)
 #define MEMREADOOB64		_IOWR('M', 22, struct mtd_oob_buf64)
+#define MEMWRITE		_IOWR('M', 24, struct mtd_write_req)
+#define MEMREAD		_IOWR('M', 100, struct mtd_read_req)
 
 /*
  * Obsolete legacy interface. Keep it in order not to break userspace
