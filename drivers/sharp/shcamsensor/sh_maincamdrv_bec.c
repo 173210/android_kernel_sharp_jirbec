@@ -37,12 +37,14 @@
 #include <mach/camera.h>
 #include <sharp/sh_smem.h>
 
-#include "sh_maincamdrv.h"
+#include "sh_maincamdrv_bec.h"
 #include <linux/mfd/tps65023.h>
 
 #include <linux/mm.h>
 #include <linux/io.h>
 #include <asm/pgtable.h>
+
+#include "sh_maincam_power_ctrl_def.h"
 
 #define SH_MAINCAM_MINORNUM_BASE    0
 #define SH_MAINCAM_DEVICE_COUNT     (1)
@@ -56,20 +58,20 @@
 #define SH_MAINCAM_HCS2_ADDR        0x94000000
 #define SH_MAINCAM_HCS2_SIZE        0x1000
 
-#define SH_MAINCAM_DELAY                900
-#define SH_MAINCAM_GPIO_CAM_VSYNC       2
-#define SH_MAINCAM_GPIO_CAM_INT         3
-#define SH_MAINCAM_GPIO_CAM_DATA_0      4
-#define SH_MAINCAM_GPIO_CAM_DATA_1      5
-#define SH_MAINCAM_GPIO_CAM_DATA_2      6
-#define SH_MAINCAM_GPIO_CAM_DATA_3      7
-#define SH_MAINCAM_GPIO_CAM_DATA_4      8
-#define SH_MAINCAM_GPIO_CAM_DATA_5      9
-#define SH_MAINCAM_GPIO_CAM_DATA_6      10
-#define SH_MAINCAM_GPIO_CAM_DATA_7      11
-#define SH_MAINCAM_GPIO_CAM_PCLK        12
-#define SH_MAINCAM_GPIO_CAM_HSYNC       13
-#define SH_MAINCAM_GPIO_CAM_VSYNC_B     14
+#define SH_MAINCAM_DELAY            400
+#define SH_MAINCAM_GPIO_CAM_VSYNC   2
+#define SH_MAINCAM_GPIO_CAM_INT     3
+#define SH_MAINCAM_GPIO_CAM_DATA_0  4
+#define SH_MAINCAM_GPIO_CAM_DATA_1  5
+#define SH_MAINCAM_GPIO_CAM_DATA_2  6
+#define SH_MAINCAM_GPIO_CAM_DATA_3  7
+#define SH_MAINCAM_GPIO_CAM_DATA_4  8
+#define SH_MAINCAM_GPIO_CAM_DATA_5  9
+#define SH_MAINCAM_GPIO_CAM_DATA_6  10
+#define SH_MAINCAM_GPIO_CAM_DATA_7  11
+#define SH_MAINCAM_GPIO_CAM_PCLK    12
+#define SH_MAINCAM_GPIO_CAM_HSYNC   13
+#define SH_MAINCAM_GPIO_CAM_VSYNC_B 14
 
 static struct class  *sh_maincam_class;
 static dev_t          sh_maincam_devno;
@@ -615,13 +617,13 @@ static int sh_maincam_drv_camint_exit_isr( void __user *argp )
     return rc;
 }
 
-static int sh_maincam_drv_access_gpio( void __user *argp )
+static int sh_maincam_drv_access_gpio(void __user *argp)
 {
     int ret = 0;
-    struct sh_maincam_ctrl_cmd param;
-    struct vreg *camdrv_vreg = NULL;
+    struct sh_maincam_ctrl_cmd    param;
+    struct vreg                    *camdrv_vreg = NULL;
 
-    mutex_lock( &sh_maincam_sync_head->mut_lock );
+    mutex_lock(&sh_maincam_sync_head->mut_lock);
 
     do {
         if (copy_from_user(&param,
@@ -631,66 +633,65 @@ static int sh_maincam_drv_access_gpio( void __user *argp )
             break;
         }
 
-        if( (param.addr == SH_MAINCAM_GPIO_CAM_POW1) ||
-            (param.addr == SH_MAINCAM_GPIO_CAM_POW2) ||
-            (param.addr == SH_MAINCAM_GPIO_CAM_POW3)){
-            gpio_direction_output(param.addr, param.w_data[0]);
-            udelay(SH_MAINCAM_DELAY);
-        }
-        else if(param.addr == SH_MAINCAM_VREG_GP2) {
+        if (param.addr == SH_MAINCAM_VREG_GP2) {
             camdrv_vreg = vreg_get(NULL, "gp2");
             if (IS_ERR(camdrv_vreg)) {
                 ret = -EFAULT;
                 break;
             }
-            if( param.w_data[0] == CAM_GPIO_HI ){
+            if (param.w_data[0] == CAM_GPIO_HI) {
                 ret = vreg_set_level(camdrv_vreg, 3000);
-                ret = vreg_enable( camdrv_vreg );
+                ret = vreg_enable(camdrv_vreg);
                 udelay(SH_MAINCAM_DELAY);
             }
             else {
-                ret = vreg_disable( camdrv_vreg );
+                ret = vreg_disable(camdrv_vreg);
             }
         }
-        else if(param.addr == SH_MAINCAM_VREG_GP9) {
+        else if (param.addr == SH_MAINCAM_VREG_GP3) {
+            ret = sh_maincam_drv_power_ctrl(param.w_data[0], SH_MAINCAMDRV_USE_CAMERA_DRV);
+        }
+        else if (param.addr == SH_MAINCAM_VREG_GP9) {
             camdrv_vreg = vreg_get(NULL, "gp9");
             if (IS_ERR(camdrv_vreg)) {
                 ret = -EFAULT;
                 break;
             }
-            if( param.w_data[0] == CAM_GPIO_HI ){
-                ret = vreg_set_level(camdrv_vreg, 1500);
-                ret = vreg_enable( camdrv_vreg );
+            if (param.w_data[0] == CAM_GPIO_HI) {
+                ret = vreg_set_level(camdrv_vreg, 2800);
+                ret = vreg_enable(camdrv_vreg);
                 udelay(SH_MAINCAM_DELAY);
             }
             else {
-                ret = vreg_disable( camdrv_vreg );
+                ret = vreg_disable(camdrv_vreg);
             }
         }
-        else if(param.addr == SH_MAINCAM_VREG_LVSWL) {
-            camdrv_vreg = vreg_get(NULL, "lvsw1");
+        else if (param.addr == SH_MAINCAM_VREG_GP15) {
+            camdrv_vreg = vreg_get(NULL, "gp15");
             if (IS_ERR(camdrv_vreg)) {
                 ret = -EFAULT;
                 break;
             }
-            if( param.w_data[0] == CAM_GPIO_HI ){
-                ret = vreg_set_level(camdrv_vreg, 1800);
-                ret = vreg_enable( camdrv_vreg );
+            if (param.w_data[0] == CAM_GPIO_HI) {
+                ret = vreg_set_level(camdrv_vreg, 1230);
+                ret = vreg_enable(camdrv_vreg);
                 udelay(SH_MAINCAM_DELAY);
             }
             else {
-                ret = vreg_disable( camdrv_vreg );
+                ret = vreg_disable(camdrv_vreg);
             }
         }
-        else
-        if( param.addr == SH_MAINCAM_GPIO_CAM_MCLK ){
-            if( param.w_data[0] == CAM_GPIO_HI ){
-                msm_camio_clk_rate_set(65*100*1000);
+        else if (param.addr == SH_MAINCAM_VREG_LVSWL) {
+        }
+        else if (param.addr == SH_MAINCAM_GPIO_CAM_MCLK) {
+            if (param.w_data[0] == CAM_GPIO_HI) {
+                msm_camio_clk_rate_set(96*100*1000);
+
                 mdelay(2);
-                gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_MCLK, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_6MA), GPIO_CFG_ENABLE );
+                gpio_tlmm_config(GPIO_CFG(SH_MAINCAM_GPIO_CAM_MCLK, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_10MA), GPIO_CFG_ENABLE);
             }
             else{
-                gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_MCLK, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), GPIO_CFG_DISABLE );
+                gpio_tlmm_config(GPIO_CFG(SH_MAINCAM_GPIO_CAM_MCLK, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_10MA), GPIO_CFG_DISABLE);
             }
         }
         else{
@@ -707,77 +708,71 @@ static int sh_maincam_drv_sensor_init( void )
 {
     int ret = 0;
 
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_VSYNC,       0, GPIO_CFG_INPUT,    GPIO_CFG_NO_PULL,   GPIO_CFG_2MA), GPIO_CFG_ENABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_INT,         0, GPIO_CFG_INPUT,    GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_0,      1, GPIO_CFG_INPUT,    GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_1,      1, GPIO_CFG_INPUT,    GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_2,      1, GPIO_CFG_INPUT,    GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_3,      1, GPIO_CFG_INPUT,    GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_4,      1, GPIO_CFG_INPUT,    GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_5,      1, GPIO_CFG_INPUT,    GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_6,      1, GPIO_CFG_INPUT,    GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_7,      1, GPIO_CFG_INPUT,    GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_PCLK,        1, GPIO_CFG_INPUT,    GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_HSYNC,       1, GPIO_CFG_INPUT,    GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_VSYNC_B,     1, GPIO_CFG_INPUT,    GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_MCLK,        0, GPIO_CFG_OUTPUT,   GPIO_CFG_NO_PULL,   GPIO_CFG_10MA),GPIO_CFG_DISABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_POW1,        0, GPIO_CFG_OUTPUT,   GPIO_CFG_NO_PULL,   GPIO_CFG_6MA), GPIO_CFG_ENABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_POW2,        0, GPIO_CFG_OUTPUT,   GPIO_CFG_NO_PULL,   GPIO_CFG_6MA), GPIO_CFG_ENABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_POW3,        0, GPIO_CFG_OUTPUT,   GPIO_CFG_NO_PULL,   GPIO_CFG_6MA), GPIO_CFG_ENABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_RST_N,       0, GPIO_CFG_OUTPUT,   GPIO_CFG_NO_PULL,   GPIO_CFG_6MA), GPIO_CFG_ENABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_VSYNC,       0, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL,   GPIO_CFG_2MA), GPIO_CFG_ENABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_INT,         0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_0,      1, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_1,      1, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_2,      1, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_3,      1, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_4,      1, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_5,      1, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_6,      1, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_7,      1, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_PCLK,        1, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_HSYNC,       1, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_VSYNC_B,     1, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_RST_N,       0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL,   GPIO_CFG_6MA), GPIO_CFG_ENABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_MCLK,        0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_10MA),GPIO_CFG_DISABLE );
 
-    gpio_tlmm_config( GPIO_CFG(124,0, GPIO_CFG_INPUT,GPIO_CFG_PULL_DOWN,GPIO_CFG_10MA), GPIO_CFG_ENABLE );
-    gpio_tlmm_config( GPIO_CFG(126,0, GPIO_CFG_INPUT,GPIO_CFG_PULL_DOWN,GPIO_CFG_10MA), GPIO_CFG_ENABLE );
-    gpio_tlmm_config( GPIO_CFG(127,0, GPIO_CFG_INPUT,GPIO_CFG_PULL_DOWN,GPIO_CFG_10MA), GPIO_CFG_ENABLE );
-    gpio_tlmm_config( GPIO_CFG(128,0, GPIO_CFG_INPUT,GPIO_CFG_PULL_DOWN,GPIO_CFG_10MA), GPIO_CFG_ENABLE );
-    gpio_tlmm_config( GPIO_CFG(129,0, GPIO_CFG_INPUT,GPIO_CFG_PULL_DOWN,GPIO_CFG_10MA), GPIO_CFG_ENABLE );
-    gpio_tlmm_config( GPIO_CFG(130,0, GPIO_CFG_INPUT,GPIO_CFG_PULL_DOWN,GPIO_CFG_10MA), GPIO_CFG_ENABLE );
-    gpio_tlmm_config( GPIO_CFG(131,0, GPIO_CFG_INPUT,GPIO_CFG_PULL_DOWN,GPIO_CFG_10MA), GPIO_CFG_ENABLE );
-    gpio_tlmm_config( GPIO_CFG(132,0, GPIO_CFG_INPUT,GPIO_CFG_PULL_DOWN,GPIO_CFG_10MA), GPIO_CFG_ENABLE );
-    gpio_tlmm_config( GPIO_CFG(160,0, GPIO_CFG_INPUT,GPIO_CFG_PULL_DOWN,GPIO_CFG_10MA), GPIO_CFG_ENABLE );
-    gpio_tlmm_config( GPIO_CFG(161,0, GPIO_CFG_INPUT,GPIO_CFG_PULL_DOWN,GPIO_CFG_10MA), GPIO_CFG_ENABLE );
-    gpio_tlmm_config( GPIO_CFG(162,0, GPIO_CFG_INPUT,GPIO_CFG_PULL_DOWN,GPIO_CFG_10MA), GPIO_CFG_ENABLE );
+    gpio_tlmm_config( GPIO_CFG(124,                             0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_10MA),GPIO_CFG_ENABLE );
+    gpio_tlmm_config( GPIO_CFG(126,                             0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_10MA),GPIO_CFG_ENABLE );
+    gpio_tlmm_config( GPIO_CFG(127,                             0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_10MA),GPIO_CFG_ENABLE );
+    gpio_tlmm_config( GPIO_CFG(128,                             0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_10MA),GPIO_CFG_ENABLE );
+    gpio_tlmm_config( GPIO_CFG(129,                             0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_10MA),GPIO_CFG_ENABLE );
+    gpio_tlmm_config( GPIO_CFG(130,                             0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_10MA),GPIO_CFG_ENABLE );
+    gpio_tlmm_config( GPIO_CFG(131,                             0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_10MA),GPIO_CFG_ENABLE );
+    gpio_tlmm_config( GPIO_CFG(132,                             0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_10MA),GPIO_CFG_ENABLE );
+    gpio_tlmm_config( GPIO_CFG(160,                             0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_10MA),GPIO_CFG_ENABLE );
+    gpio_tlmm_config( GPIO_CFG(161,                             0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_10MA),GPIO_CFG_ENABLE );
+    gpio_tlmm_config( GPIO_CFG(162,                             0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_10MA),GPIO_CFG_ENABLE );
 
     mdelay(1);
 
     return ret;
-
 }
 
 static int sh_maincam_drv_sensor_off( void )
 {
     int ret = 0;
 
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_VSYNC,       0, GPIO_CFG_INPUT,    GPIO_CFG_NO_PULL,   GPIO_CFG_2MA), GPIO_CFG_DISABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_INT,         0, GPIO_CFG_INPUT,    GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_DISABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_0,      1, GPIO_CFG_INPUT,    GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_DISABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_1,      1, GPIO_CFG_INPUT,    GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_DISABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_2,      1, GPIO_CFG_INPUT,    GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_DISABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_3,      1, GPIO_CFG_INPUT,    GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_DISABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_4,      1, GPIO_CFG_INPUT,    GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_DISABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_5,      1, GPIO_CFG_INPUT,    GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_DISABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_6,      1, GPIO_CFG_INPUT,    GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_DISABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_7,      1, GPIO_CFG_INPUT,    GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_DISABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_PCLK,        1, GPIO_CFG_INPUT,    GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_DISABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_HSYNC,       1, GPIO_CFG_INPUT,    GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_DISABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_VSYNC_B,     1, GPIO_CFG_INPUT,    GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_DISABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_MCLK,        0, GPIO_CFG_OUTPUT,   GPIO_CFG_NO_PULL,   GPIO_CFG_10MA),GPIO_CFG_DISABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_POW1,        0, GPIO_CFG_OUTPUT,   GPIO_CFG_NO_PULL,   GPIO_CFG_6MA), GPIO_CFG_DISABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_POW2,        0, GPIO_CFG_OUTPUT,   GPIO_CFG_NO_PULL,   GPIO_CFG_6MA), GPIO_CFG_DISABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_POW3,        0, GPIO_CFG_OUTPUT,   GPIO_CFG_NO_PULL,   GPIO_CFG_6MA), GPIO_CFG_DISABLE );
-    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_RST_N,       0, GPIO_CFG_OUTPUT,   GPIO_CFG_NO_PULL,   GPIO_CFG_6MA), GPIO_CFG_DISABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_VSYNC,       0, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL,   GPIO_CFG_2MA), GPIO_CFG_DISABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_INT,         0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_DISABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_0,      1, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_DISABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_1,      1, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_DISABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_2,      1, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_DISABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_3,      1, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_DISABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_4,      1, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_DISABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_5,      1, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_DISABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_6,      1, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_DISABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_DATA_7,      1, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_DISABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_PCLK,        1, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_DISABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_HSYNC,       1, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_DISABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_VSYNC_B,     1, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_DISABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_RST_N,       0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL,   GPIO_CFG_6MA), GPIO_CFG_DISABLE );
 
-    gpio_tlmm_config( GPIO_CFG(124,0, GPIO_CFG_INPUT,GPIO_CFG_PULL_DOWN,GPIO_CFG_10MA), GPIO_CFG_DISABLE );
-    gpio_tlmm_config( GPIO_CFG(126,0, GPIO_CFG_INPUT,GPIO_CFG_PULL_DOWN,GPIO_CFG_10MA), GPIO_CFG_DISABLE );
-    gpio_tlmm_config( GPIO_CFG(127,0, GPIO_CFG_INPUT,GPIO_CFG_PULL_DOWN,GPIO_CFG_10MA), GPIO_CFG_DISABLE );
-    gpio_tlmm_config( GPIO_CFG(128,0, GPIO_CFG_INPUT,GPIO_CFG_PULL_DOWN,GPIO_CFG_10MA), GPIO_CFG_DISABLE );
-    gpio_tlmm_config( GPIO_CFG(129,0, GPIO_CFG_INPUT,GPIO_CFG_PULL_DOWN,GPIO_CFG_10MA), GPIO_CFG_DISABLE );
-    gpio_tlmm_config( GPIO_CFG(130,0, GPIO_CFG_INPUT,GPIO_CFG_PULL_DOWN,GPIO_CFG_10MA), GPIO_CFG_DISABLE );
-    gpio_tlmm_config( GPIO_CFG(131,0, GPIO_CFG_INPUT,GPIO_CFG_PULL_DOWN,GPIO_CFG_10MA), GPIO_CFG_DISABLE );
-    gpio_tlmm_config( GPIO_CFG(132,0, GPIO_CFG_INPUT,GPIO_CFG_PULL_DOWN,GPIO_CFG_10MA), GPIO_CFG_DISABLE );
-    gpio_tlmm_config( GPIO_CFG(160,0, GPIO_CFG_INPUT,GPIO_CFG_PULL_DOWN,GPIO_CFG_10MA), GPIO_CFG_DISABLE );
-    gpio_tlmm_config( GPIO_CFG(161,0, GPIO_CFG_INPUT,GPIO_CFG_PULL_DOWN,GPIO_CFG_10MA), GPIO_CFG_DISABLE );
-    gpio_tlmm_config( GPIO_CFG(162,0, GPIO_CFG_INPUT,GPIO_CFG_PULL_DOWN,GPIO_CFG_10MA), GPIO_CFG_DISABLE );
+    gpio_tlmm_config( GPIO_CFG(SH_MAINCAM_GPIO_CAM_MCLK,        0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_10MA),GPIO_CFG_DISABLE );
+
+    gpio_tlmm_config( GPIO_CFG(124,                             0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_10MA),GPIO_CFG_DISABLE );
+    gpio_tlmm_config( GPIO_CFG(126,                             0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_10MA),GPIO_CFG_DISABLE );
+    gpio_tlmm_config( GPIO_CFG(127,                             0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_10MA),GPIO_CFG_DISABLE );
+    gpio_tlmm_config( GPIO_CFG(128,                             0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_10MA),GPIO_CFG_DISABLE );
+    gpio_tlmm_config( GPIO_CFG(129,                             0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_10MA),GPIO_CFG_DISABLE );
+    gpio_tlmm_config( GPIO_CFG(130,                             0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_10MA),GPIO_CFG_DISABLE );
+    gpio_tlmm_config( GPIO_CFG(131,                             0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_10MA),GPIO_CFG_DISABLE );
+    gpio_tlmm_config( GPIO_CFG(132,                             0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_10MA),GPIO_CFG_DISABLE );
+    gpio_tlmm_config( GPIO_CFG(160,                             0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_10MA),GPIO_CFG_DISABLE );
+    gpio_tlmm_config( GPIO_CFG(161,                             0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_10MA),GPIO_CFG_DISABLE );
+    gpio_tlmm_config( GPIO_CFG(162,                             0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_10MA),GPIO_CFG_DISABLE );
 
     return ret;
 }
@@ -1024,6 +1019,8 @@ static int sh_maincam_drv_sync_init( struct sh_maincam_sync_head_t *sync )
     wake_lock_init( &sync->wake_lock, WAKE_LOCK_SUSPEND, SH_MAINCAM_DEVICE_NAME );
     sync->irq_event_count = 0;
     mutex_init( &sync->mut_lock );
+
+    mutex_init(&maincam_power_mutex_lock);
 
     return rc;
 }
